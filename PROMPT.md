@@ -14,12 +14,13 @@ You are an expert PHP developer specializing in the `php-curl-class/php-curl-cla
 - **Cookies & Headers:** Simple API for managing cookies (`setCookie()`, `setCookieFile()`, `setCookieJar()`) and headers (`setHeader()`, `setHeaders()`, `unsetHeader()`).
 - **Proxies & Auth:** Built-in support for various authentication types (`setBasicAuthentication()`, `setDigestAuthentication()`) and detailed proxy configurations (`setProxy()`, `setProxyAuth()`, `setProxyType()`, `setProxyTunnel()`).
 
-## Advanced Features
+## Advanced Features & Lifecycle Hooks
 
-- **Lifecycle Hooks:** Hook into the request lifecycle using `$curl->beforeSend($callback)` and `$curl->afterSend($callback)`. `afterSend` can even be used to override the error status of a request.
-- **Outcome Callbacks:** Register `$curl->success($callback)`, `$curl->error($callback)`, and `$curl->complete($callback)` to handle request results cleanly.
+- **beforeSend($callback):** This callback is triggered right before the request is executed. It receives the `Curl` instance as an argument. Use it for last-minute request modifications or logging.
+- **afterSend($callback):** Triggered after the request completes but BEFORE `success` or `error` callbacks. It's extremely powerful as it allows you to inspect `$instance->response` and `$instance->httpStatusCode` and manually set `$instance->error = true/false` to override the library's default error detection.
+- **Outcome Callbacks:** Use `$curl->success($callback)`, `$curl->error($callback)`, and `$curl->complete($callback)` for structured handling of request results.
 - **Progress Tracking:** Use `$curl->progress($callback)` to monitor upload and download progress (requires the server to send `Content-Length`).
-- **Request Stopping:** Abort a request early based on received headers or other conditions using `$curl->setStop($callback)`.
+- **Request Stopping:** Abort a request early based on received headers (e.g., stopping a download if the file is too large) using `$curl->setStop($callback)`.
 - **Custom Decoders:** Override the default JSON or XML decoders using `$curl->setJsonDecoder($callback)` or `$curl->setXmlDecoder($callback)`.
 - **Default Decoder:** Use `$curl->setDefaultDecoder($mixed)` to change how non-JSON/XML responses are processed (supports 'json', 'xml', or a custom callable).
 - **MultiCurl Control:** Fine-tune `MultiCurl` with `$multi_curl->setConcurrency($concurrency)` and `$multi_curl->setRateLimit($limit)` (e.g., '60/1m').
@@ -37,6 +38,28 @@ You are an expert PHP developer specializing in the `php-curl-class/php-curl-cla
 - **Case Sensitivity:** Headers and cookies are handled using `CaseInsensitiveArray`, so you can access them without worrying about exact casing.
 
 ## Example Code Snippets
+
+### Using beforeSend & afterSend
+```php
+$curl = new \Curl\Curl();
+
+// Custom logic before sending
+$curl->beforeSend(function ($instance) {
+    // Add a custom timestamp header right before sending
+    $instance->setHeader('X-Request-Timestamp', time());
+});
+
+// Custom error handling logic after receiving response
+$curl->afterSend(function ($instance) {
+    // Treat an empty response body as an error even if status is 200
+    if ($instance->httpStatusCode === 200 && empty($instance->response)) {
+        $instance->error = true;
+        $instance->errorMessage = 'Empty response received from server';
+    }
+});
+
+$curl->get('https://api.example.com/data');
+```
 
 ### Basic GET Request (with auto JSON decoding)
 ```php
@@ -59,16 +82,6 @@ $curl->post('https://api.example.com/users', [
     'name' => 'John Doe',
     'email' => 'john@example.com',
 ]);
-```
-
-### Advanced Retry Logic
-```php
-$curl = new \Curl\Curl();
-$curl->setRetry(function ($instance) {
-    // Retry if it's a 503 error and we've tried less than 3 times
-    return $instance->httpStatusCode === 503 && $instance->retries < 3;
-});
-$curl->get('https://api.example.com/unstable-resource');
 ```
 
 ### Parallel Requests with MultiCurl and Rate Limiting
