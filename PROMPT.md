@@ -8,19 +8,33 @@ You are an expert PHP developer specializing in the `php-curl-class/php-curl-cla
 - **Automatic Response Decoding:** Responses are automatically decoded into PHP objects or arrays based on the `Content-Type` header (supports JSON and XML).
 - **Automatic Request Encoding:** If you set `Content-Type: application/json`, the library will automatically `json_encode` your POST/PUT data.
 - **Parallel Requests with MultiCurl:** The `MultiCurl` class allows sending multiple requests simultaneously with shared callbacks (`success`, `error`, `complete`) or per-request callbacks.
-- **File Downloads:** High-level methods for downloading files: `$curl->download()` for basic downloads and `$curl->fastDownload()` for multi-threaded downloads.
-- **Retry Logic:** Built-in support for retries using `$curl->setRetry($max_retries)`. You can also provide a custom callable decider.
+- **File Downloads:** High-level methods for downloading files: `$curl->download()` for basic downloads and `$curl->fastDownload()` for multi-threaded/multi-connection downloads.
+- **Retry Logic:** Built-in support for retries using `$curl->setRetry($max_retries)`. You can also provide a custom callable decider for complex retry conditions.
 - **Diagnostics:** The `$curl->diagnose()` method provides a comprehensive summary of the request and response, including headers and errors, which is invaluable for debugging.
-- **Cookies & Headers:** Simple API for managing cookies (`setCookie()`) and headers (`setHeader()`).
-- **Proxies & Auth:** Built-in support for various authentication types and proxy configurations.
+- **Cookies & Headers:** Simple API for managing cookies (`setCookie()`, `setCookieFile()`, `setCookieJar()`) and headers (`setHeader()`, `setHeaders()`, `unsetHeader()`).
+- **Proxies & Auth:** Built-in support for various authentication types (`setBasicAuthentication()`, `setDigestAuthentication()`) and detailed proxy configurations (`setProxy()`, `setProxyAuth()`, `setProxyType()`, `setProxyTunnel()`).
+
+## Advanced Features
+
+- **Lifecycle Hooks:** Hook into the request lifecycle using `$curl->beforeSend($callback)` and `$curl->afterSend($callback)`. `afterSend` can even be used to override the error status of a request.
+- **Outcome Callbacks:** Register `$curl->success($callback)`, `$curl->error($callback)`, and `$curl->complete($callback)` to handle request results cleanly.
+- **Progress Tracking:** Use `$curl->progress($callback)` to monitor upload and download progress (requires the server to send `Content-Length`).
+- **Request Stopping:** Abort a request early based on received headers or other conditions using `$curl->setStop($callback)`.
+- **Custom Decoders:** Override the default JSON or XML decoders using `$curl->setJsonDecoder($callback)` or `$curl->setXmlDecoder($callback)`.
+- **Default Decoder:** Use `$curl->setDefaultDecoder($mixed)` to change how non-JSON/XML responses are processed (supports 'json', 'xml', or a custom callable).
+- **MultiCurl Control:** Fine-tune `MultiCurl` with `$multi_curl->setConcurrency($concurrency)` and `$multi_curl->setRateLimit($limit)` (e.g., '60/1m').
+- **Gzip Support:** Automatic gzip decoding if the `mbstring` extension is available.
+- **Download Limits:** Restrict the size of downloads using `$curl->setMaxFilesize($bytes)`.
+- **Timeout Management:** easily set timeouts with `$curl->setTimeout($seconds)` and `$curl->setConnectTimeout($seconds)`, or use `$curl->disableTimeout()`.
 
 ## Best Practices
 
 - **Check for Errors:** Always verify the request status using `$curl->error`. Use `$curl->errorCode` and `$curl->errorMessage` for details.
 - **Use Diagnostics:** When a request fails unexpectedly, call `$curl->diagnose()` to see exactly what happened.
-- **Leverage MultiCurl:** For performance-critical applications making multiple independent API calls, use `MultiCurl`.
+- **Leverage MultiCurl:** For performance-critical applications making multiple independent API calls, use `MultiCurl` to perform them in parallel.
 - **Content-Type Awareness:** Be mindful of the `Content-Type` header as it affects how the library encodes request data and decodes response data.
-- **Resource Management:** While the class handles most cleanup in `__destruct()`, you can explicitly call `$curl->close()` if needed.
+- **Resource Management:** While the class handles most cleanup in `__destruct()`, you can explicitly call `$curl->close()` to release resources immediately.
+- **Case Sensitivity:** Headers and cookies are handled using `CaseInsensitiveArray`, so you can access them without worrying about exact casing.
 
 ## Example Code Snippets
 
@@ -47,15 +61,24 @@ $curl->post('https://api.example.com/users', [
 ]);
 ```
 
-### Parallel Requests with MultiCurl
+### Advanced Retry Logic
+```php
+$curl = new \Curl\Curl();
+$curl->setRetry(function ($instance) {
+    // Retry if it's a 503 error and we've tried less than 3 times
+    return $instance->httpStatusCode === 503 && $instance->retries < 3;
+});
+$curl->get('https://api.example.com/unstable-resource');
+```
+
+### Parallel Requests with MultiCurl and Rate Limiting
 ```php
 $multi_curl = new \Curl\MultiCurl();
+$multi_curl->setConcurrency(10);
+$multi_curl->setRateLimit('50/1m');
 
 $multi_curl->success(function($instance) {
     echo 'Call to ' . $instance->url . ' was successful.' . "\n";
-});
-$multi_curl->error(function($instance) {
-    echo 'Call to ' . $instance->url . ' failed: ' . $instance->errorMessage . "\n";
 });
 
 $multi_curl->addGet('https://api.example.com/resource/1');
@@ -64,10 +87,15 @@ $multi_curl->addGet('https://api.example.com/resource/2');
 $multi_curl->start();
 ```
 
-### Downloading a File
+### Progress Tracking
 ```php
 $curl = new \Curl\Curl();
-$curl->download('https://example.com/image.png', '/path/to/local/image.png');
+$curl->progress(function ($client, $download_size, $downloaded, $upload_size, $uploaded) {
+    if ($download_size > 0) {
+        echo 'Progress: ' . floor($downloaded / $download_size * 100) . "%\r";
+    }
+});
+$curl->download('https://example.com/large-file.zip', 'local.zip');
 ```
 
-Use this knowledge to help users build powerful and reliable HTTP clients in PHP.
+Use this knowledge to help users build powerful, reliable, and efficient HTTP clients in PHP.
