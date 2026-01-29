@@ -13,18 +13,17 @@ class MultiCurl extends BaseCurl
     public $stopTime = null;
 
     private $queuedCurls = [];
-    private $activeCurls = [];
+    protected \WeakMap $activeCurls;
     private $isStarted = false;
     private $currentStartTime = null;
     private $currentRequestCount = 0;
     private $concurrency = 25;
     private $nextCurlId = 0;
-    private $preferRequestTimeAccuracy = false;
 
     private $rateLimit = null;
     private $rateLimitEnabled = false;
     private $rateLimitReached = false;
-    private $maxRequests = null;
+    private $maxRequestsPerInterval = null;
     private $interval = null;
     private $intervalSeconds = null;
     private $unit = null;
@@ -48,6 +47,7 @@ class MultiCurl extends BaseCurl
     {
         $this->multiCurl = curl_multi_init();
         $this->headers = new CaseInsensitiveArray();
+        $this->activeCurls = new \WeakMap();
 
         if ($base_url !== null) {
             $this->setUrl($base_url);
@@ -111,7 +111,7 @@ class MultiCurl extends BaseCurl
             // Attempt to resume download only when a temporary download file exists and is not empty.
             if (is_file($download_filename) && $filesize = filesize($download_filename)) {
                 $first_byte_position = $filesize;
-                $range = $first_byte_position . '-';
+                $range = (string)$first_byte_position . '-';
                 $curl->setRange($range);
                 $curl->fileHandle = fopen($download_filename, 'ab');
 
@@ -127,7 +127,10 @@ class MultiCurl extends BaseCurl
             } else {
                 $curl->fileHandle = fopen('php://temp', 'wb');
                 $curl->downloadCompleteCallback = function ($instance, $fh) use ($filename) {
-                    file_put_contents($filename, stream_get_contents($fh));
+                    $contents = stream_get_contents($fh);
+                    if ($contents !== false) {
+                        file_put_contents($filename, $contents);
+                    }
                 };
             }
         }
@@ -348,6 +351,7 @@ class MultiCurl extends BaseCurl
     /**
      * Close
      */
+    #[\Override]
     public function close()
     {
         foreach ($this->queuedCurls as $curl) {
@@ -376,6 +380,7 @@ class MultiCurl extends BaseCurl
      * @param $key
      * @param $value
      */
+    #[\Override]
     public function setCookie($key, $value)
     {
         $this->cookies[$key] = $value;
@@ -386,6 +391,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $cookies
      */
+    #[\Override]
     public function setCookies($cookies)
     {
         foreach ($cookies as $key => $value) {
@@ -398,6 +404,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $string
      */
+    #[\Override]
     public function setCookieString($string)
     {
         $this->setOpt(CURLOPT_COOKIE, $string);
@@ -408,6 +415,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $cookie_file
      */
+    #[\Override]
     public function setCookieFile($cookie_file)
     {
         $this->setOpt(CURLOPT_COOKIEFILE, $cookie_file);
@@ -418,6 +426,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $cookie_jar
      */
+    #[\Override]
     public function setCookieJar($cookie_jar)
     {
         $this->setOpt(CURLOPT_COOKIEJAR, $cookie_jar);
@@ -431,6 +440,7 @@ class MultiCurl extends BaseCurl
      * @param $key
      * @param $value
      */
+    #[\Override]
     public function setHeader($key, $value)
     {
         $this->headers[$key] = $value;
@@ -444,6 +454,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $headers
      */
+    #[\Override]
     public function setHeaders($headers)
     {
         if (ArrayUtil::isArrayAssoc($headers)) {
@@ -454,7 +465,7 @@ class MultiCurl extends BaseCurl
             }
         } else {
             foreach ($headers as $header) {
-                list($key, $value) = explode(':', $header, 2);
+                list($key, $value) = array_pad(explode(':', $header, 2), 2, '');
                 $key = trim($key);
                 $value = trim($value);
                 $this->headers[$key] = $value;
@@ -469,6 +480,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $mixed boolean|callable
      */
+    #[\Override]
     public function setJsonDecoder($mixed)
     {
         if ($mixed === false) {
@@ -483,6 +495,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $mixed boolean|callable
      */
+    #[\Override]
     public function setXmlDecoder($mixed)
     {
         if ($mixed === false) {
@@ -512,6 +525,7 @@ class MultiCurl extends BaseCurl
      * @param $option
      * @param $value
      */
+    #[\Override]
     public function setOpt($option, $value)
     {
         $this->options[$option] = $value;
@@ -536,6 +550,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $options
      */
+    #[\Override]
     public function setOpts($options)
     {
         foreach ($options as $option => $value) {
@@ -564,12 +579,12 @@ class MultiCurl extends BaseCurl
             '';
         if (!preg_match($rate_limit_pattern, $rate_limit, $matches)) {
             throw new \UnexpectedValueException(
-                'rate limit must be formatted as $max_requests/$interval(s|m|h) ' .
+                'rate limit must be formatted as $max_requests_per_interval/$interval(s|m|h) ' .
                 '(e.g. "60/1m" for a maximum of 60 requests per 1 minute)'
             );
         }
 
-        $max_requests = (int)$matches['1'];
+        $max_requests_per_interval = (int)$matches['1'];
         if ($matches['2'] === '') {
             $interval = 1;
         } else {
@@ -578,6 +593,7 @@ class MultiCurl extends BaseCurl
         $unit = strtolower($matches['3']);
 
         // Convert interval to seconds based on unit.
+        $interval_seconds = '';
         if ($unit === 's') {
             $interval_seconds = $interval * 1;
         } elseif ($unit === 'm') {
@@ -586,9 +602,9 @@ class MultiCurl extends BaseCurl
             $interval_seconds = $interval * 3600;
         }
 
-        $this->rateLimit = $max_requests . '/' . $interval . $unit;
+        $this->rateLimit = (string)$max_requests_per_interval . '/' . (string)$interval . $unit;
         $this->rateLimitEnabled = true;
-        $this->maxRequests = $max_requests;
+        $this->maxRequestsPerInterval = $max_requests_per_interval;
         $this->interval = $interval;
         $this->intervalSeconds = $interval_seconds;
         $this->unit = $unit;
@@ -607,6 +623,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $mixed
      */
+    #[\Override]
     public function setRetry($mixed)
     {
         $this->retry = $mixed;
@@ -618,6 +635,7 @@ class MultiCurl extends BaseCurl
      * @param $url
      * @param $mixed_data
      */
+    #[\Override]
     public function setUrl($url, $mixed_data = '')
     {
         $built_url = Url::buildUrl($url, $mixed_data);
@@ -660,80 +678,47 @@ class MultiCurl extends BaseCurl
                 $this->waitUntilRequestQuotaAvailable();
             }
 
-            if ($this->preferRequestTimeAccuracy) {
-                // Wait for activity on any curl_multi connection when curl_multi_select (libcurl) fails to correctly
-                // block.
-                // https://bugs.php.net/bug.php?id=63411
-                //
-                // Also, use a shorter curl_multi_select() timeout instead the default of one second. This allows
-                // pending requests to have more accurate start times. Without a shorter timeout, it can be nearly a
-                // full second before available request quota is rechecked and pending requests can be initialized.
-                if (curl_multi_select($this->multiCurl, 0.2) === -1) {
-                    usleep(100000);
-                }
-
-                curl_multi_exec($this->multiCurl, $active);
-            } else {
-                // Use multiple loops to get data off of the multi handler. Without this, the following error may appear
-                // intermittently on certain versions of PHP:
-                //   curl_multi_exec(): supplied resource is not a valid cURL handle resource
-
-                // Clear out the curl buffer.
-                do {
-                    $status = curl_multi_exec($this->multiCurl, $active);
-                } while ($status === CURLM_CALL_MULTI_PERFORM);
-
-                // Wait for more information and then get that information.
-                while ($active && $status === CURLM_OK) {
-                    // Check if the network socket has some data.
-                    if (curl_multi_select($this->multiCurl) !== -1) {
-                        // Process the data for as long as the system tells us to keep getting it.
-                        do {
-                            $status = curl_multi_exec($this->multiCurl, $active);
-                        } while ($status === CURLM_CALL_MULTI_PERFORM);
-                    }
-                }
-            }
+            curl_multi_exec($this->multiCurl, $active);
 
             while (
                 (is_resource($this->multiCurl) || $this->multiCurl instanceof \CurlMultiHandle) &&
                 (($info_array = curl_multi_info_read($this->multiCurl)) !== false)
             ) {
                 if ($info_array['msg'] === CURLMSG_DONE) {
-                    foreach ($this->activeCurls as $key => $curl) {
-                        if ($curl->curl === $info_array['handle']) {
-                            // Set the error code for multi handles using the "result" key in the array returned by
-                            // curl_multi_info_read(). Using curl_errno() on a multi handle will incorrectly return 0
-                            // for errors.
-                            $curl->curlErrorCode = $info_array['result'];
-                            $curl->exec($curl->curl);
+                    $native_handle = $info_array['handle'];
 
-                            if ($curl->attemptRetry()) {
-                                // Remove completed handle before adding again in order to retry request.
-                                curl_multi_remove_handle($this->multiCurl, $curl->curl);
+                    if ($this->activeCurls->offsetExists($native_handle)) {
+                        $curl = $this->activeCurls[$native_handle];
 
-                                $curlm_error_code = curl_multi_add_handle($this->multiCurl, $curl->curl);
-                                if ($curlm_error_code !== CURLM_OK) {
-                                    throw new \ErrorException(
-                                        'cURL multi add handle error: ' . curl_multi_strerror($curlm_error_code)
-                                    );
-                                }
+                        // Set the error code for multi handles using the "result" key in the array returned by
+                        // curl_multi_info_read(). Using curl_errno() on a multi handle will incorrectly return 0
+                        // for errors.
+                        $curl->curlErrorCode = $info_array['result'];
+                        $curl->exec($native_handle);
 
-                                $curl->call($curl->beforeSendCallback);
-                            } else {
-                                $curl->execDone();
+                        if ($curl->attemptRetry()) {
+                            // Remove completed handle before adding again in order to retry request.
+                            curl_multi_remove_handle($this->multiCurl, $native_handle);
 
-                                // Remove completed instance from active curls.
-                                unset($this->activeCurls[$key]);
-
-                                // Remove handle of the completed instance.
-                                curl_multi_remove_handle($this->multiCurl, $curl->curl);
-
-                                // Clean up completed instance.
-                                $curl->close();
+                            $curlm_error_code = curl_multi_add_handle($this->multiCurl, $native_handle);
+                            if ($curlm_error_code !== CURLM_OK) {
+                                throw new \ErrorException(
+                                    'cURL multi add handle error: ' . curl_multi_strerror($curlm_error_code)
+                                );
                             }
 
-                            break;
+                            $curl->call($curl->beforeSendCallback);
+                        } else {
+                            $curl->execDone();
+
+                            // Remove completed instance from active curls.
+                            $this->activeCurls->offsetUnset($native_handle);
+
+                            // Remove handle of the completed instance.
+                            curl_multi_remove_handle($this->multiCurl, $native_handle);
+
+                            // Clean up completed instance.
+                            $curl->close();
                         }
                     }
                 }
@@ -747,24 +732,36 @@ class MultiCurl extends BaseCurl
     /**
      * Stop
      */
+    #[\Override]
     public function stop()
     {
+        if (!$this->isStarted) {
+            return;
+        }
+
         // Remove any queued curl requests.
         while (count($this->queuedCurls)) {
             $curl = array_pop($this->queuedCurls);
             $curl->close();
         }
 
+        /**
+         * @var \CurlHandle $native_handle
+         * @var \Curl\Curl  $curl
+         */
         // Attempt to stop active curl requests.
-        while (count($this->activeCurls)) {
-            // Remove instance from active curls.
-            $curl = array_pop($this->activeCurls);
-
+        foreach ($this->activeCurls as $native_handle => $curl) {
             // Remove active curl handle.
-            curl_multi_remove_handle($this->multiCurl, $curl->curl);
+            curl_multi_remove_handle($this->multiCurl, $native_handle);
+
+            // Remove instance from active curls.
+            $this->activeCurls->offsetUnset($native_handle);
 
             $curl->stop();
         }
+
+        $this->isStarted = false;
+        $this->stopTime = microtime(true);
     }
 
     /**
@@ -774,6 +771,7 @@ class MultiCurl extends BaseCurl
      *
      * @param $key
      */
+    #[\Override]
     public function unsetHeader($key)
     {
         unset($this->headers[$key]);
@@ -781,10 +779,11 @@ class MultiCurl extends BaseCurl
 
     /**
      * Set request time accuracy
+     *
+     * @deprecated This method is deprecated and no longer has any effect.
      */
     public function setRequestTimeAccuracy()
     {
-        $this->preferRequestTimeAccuracy = true;
     }
 
     /**
@@ -838,7 +837,7 @@ class MultiCurl extends BaseCurl
 
         // Add instance to list of active curls.
         $this->currentRequestCount += 1;
-        $this->activeCurls[$curl->id] = $curl;
+        $this->activeCurls[$curl->curl] = $curl;
 
         // Set callbacks if not already individually set.
         if ($curl->beforeSendCallback === null) {
@@ -899,23 +898,22 @@ class MultiCurl extends BaseCurl
         // Calculate if there's request quota since ratelimiting is enabled.
         if ($this->rateLimitEnabled) {
             // Determine if the limit of requests per interval has been reached.
-            if ($this->currentRequestCount >= $this->maxRequests) {
+            if ($this->currentRequestCount >= $this->maxRequestsPerInterval) {
                 $micro_time = microtime(true);
                 $elapsed_seconds = $micro_time - $this->currentStartTime;
                 if ($elapsed_seconds <= $this->intervalSeconds) {
-                    $this->rateLimitReached = true;
+                    // Rate limit reached.
                     return false;
-                } elseif ($this->rateLimitReached) {
-                    $this->rateLimitReached = false;
+                } else {
+                    // Rate limit not reached. Rate limit interval has passed,
+                    // reset counters.
                     $this->currentStartTime = $micro_time;
                     $this->currentRequestCount = 0;
                 }
             }
-
-            return true;
-        } else {
-            return true;
         }
+
+        return true;
     }
 
     /**
@@ -925,21 +923,28 @@ class MultiCurl extends BaseCurl
      */
     private function waitUntilRequestQuotaAvailable()
     {
-        $sleep_until = $this->currentStartTime + $this->intervalSeconds;
-        $sleep_seconds = $sleep_until - microtime(true);
+        $sleep_until = TimeUtil::getSleepUntilMicrotime(
+            $this->currentStartTime,
+            $this->intervalSeconds,
+        );
 
-        // Avoid using time_sleep_until() as it appears to be less precise and not sleep long enough.
-        usleep((int) $sleep_seconds * 1000000);
+        $current_microtime = microtime(true);
+        $sleep_seconds = TimeUtil::getSleepSecondsUntilMicrotime(
+            $sleep_until,
+            $current_microtime,
+        );
 
-        // Ensure that enough time has passed as usleep() may not have waited long enough.
-        $this->currentStartTime = microtime(true);
-        if ($this->currentStartTime < $sleep_until) {
-            do {
-                usleep(1000000 / 4);
-                $this->currentStartTime = microtime(true);
-            } while ($this->currentStartTime < $sleep_until);
+        list($whole_seconds, $microseconds_remainder) = TimeUtil::getWholeAndRemainderSeconds($sleep_seconds);
+
+        if ($whole_seconds >= 1) {
+            sleep($whole_seconds);
         }
 
+        if ($microseconds_remainder > 0) {
+            usleep($microseconds_remainder);
+        }
+
+        $this->currentStartTime = microtime(true);
         $this->currentRequestCount = 0;
     }
 

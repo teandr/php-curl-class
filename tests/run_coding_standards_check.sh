@@ -1,14 +1,18 @@
+#!/usr/bin/env bash
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
+source "set_vars.inc.sh"
+
 # Run commands from the project root directory.
-cd ..
+pushd ..
 
 # Enforce line ending consistency in php files.
 crlf_file=$(find . -type "f" -iname "*.php" ! -path "*/vendor/*" -exec grep --color=always --files-with-matches $'\r' {} \;)
 if [[ ! -z "${crlf_file}" ]]; then
     result="$(echo "${crlf_file}" | perl -pe 's/(.*)/CRLF line terminators found in \1/')"
-    echo "${result}"
+    echo "❌ ${result}"
     errors+=("${result}")
 fi
 
@@ -16,7 +20,7 @@ fi
 tab_char=$(find . -type "f" -iname "*.php" ! -path "*/vendor/*" -exec grep --color=always --line-number -H --perl-regexp "\t" {} \;)
 if [[ ! -z "${tab_char}" ]]; then
     result="$(echo -e "${tab_char}" | perl -pe 's/^(.*)$/Tab character found in \1/')"
-    echo "${result}"
+    echo "❌ ${result}"
     errors+=("${result}")
 fi
 
@@ -64,7 +68,7 @@ EOF
 export -f "find_invalid_indentation"
 invalid_indentation=$(find . -type "f" -iname "*.php" ! -path "*/vendor/*" -exec bash -c 'find_invalid_indentation "{}"' \;)
 if [[ ! -z "${invalid_indentation}" ]]; then
-    echo "${invalid_indentation}"
+    echo "❌ ${invalid_indentation}"
     errors+=("${invalid_indentation}")
 fi
 
@@ -72,7 +76,7 @@ fi
 trailing_whitespace=$(find . -type "f" -iname "*.php" ! -path "*/vendor/*" -exec grep --color=always --extended-regexp --line-number -H " +$" {} \;)
 if [[ ! -z "${trailing_whitespace}" ]]; then
     result="$(echo -e "${trailing_whitespace}" | perl -pe 's/^(.*)$/Trailing whitespace found in \1/')"
-    echo "${result}"
+    echo "❌ ${result}"
     errors+=("${result}")
 fi
 
@@ -80,7 +84,7 @@ fi
 equal=$(find . -type "f" -iname "*.php" ! -path "*/vendor/*" -exec grep --color=always --extended-regexp --line-number -H "[^!=]==[^=]" {} \;)
 if [[ ! -z "${equal}" ]]; then
     result="$(echo -e "${equal}" | perl -pe 's/^(.*)$/Non-identical comparison operator found in \1/')"
-    echo "${result}"
+    echo "❌ ${result}"
     errors+=("${result}")
 fi
 
@@ -88,48 +92,38 @@ fi
 elses=$(find . -type "f" -iname "*.php" ! -path "*/vendor/*" -exec grep --color=always --line-number -H --perl-regexp '^(\s+)?else(\s+)?{' {} \;)
 if [[ ! -z "${elses}" ]]; then
     result="$(echo -e "${elses}" | perl -pe 's/^(.*)$/Found newline before "else" statement in \1/')"
-    echo "${result}"
+    echo "❌ ${result}"
     errors+=("${result}")
 fi
 
 # Run PHP_CodeSniffer.
-if   [[ "${CI_PHP_VERSION}" == "7.0" ]]; then :
-elif [[ "${CI_PHP_VERSION}" == "7.1" ]]; then :
+# Determine which phpcs to use.
+if [[ -f "vendor/bin/phpcs" ]]; then
+    phpcs_to_use="vendor/bin/phpcs"
 else
+    phpcs_to_use="phpcs"
+fi
 
-    # Determine which phpcs to use.
-    if [[ -f "vendor/bin/phpcs" ]]; then
-        phpcs_to_use="vendor/bin/phpcs"
-    else
-        phpcs_to_use="phpcs"
-    fi
-
-    # Detect coding standard violations.
-    "${phpcs_to_use}" --version
-    "${phpcs_to_use}" \
-        --extensions="php" \
-        --ignore="*/vendor/*" \
-        --standard="tests/ruleset.xml" \
-        -p \
-        -s \
-        .
-    if [[ "${?}" -ne 0 ]]; then
-        echo "Error: found PHP_CodeSniffer coding standard violation(s)"
-        errors+=("found PHP_CodeSniffer coding standard violation(s)")
-    fi
-
+# Detect coding standard violations.
+"${phpcs_to_use}" --version
+"${phpcs_to_use}" \
+    --extensions="php" \
+    --ignore="*/vendor/*" \
+    --standard="tests/ruleset.xml" \
+    -p \
+    -s \
+    .
+if [[ "${?}" -ne 0 ]]; then
+    echo "❌ Error: found PHP_CodeSniffer coding standard violation(s)"
+    errors+=("found PHP_CodeSniffer coding standard violation(s)")
 fi
 
 # Run PHP-CS-Fixer.
-if   [[ "${CI_PHP_VERSION}" == "7.0" ]]; then :
-elif [[ "${CI_PHP_VERSION}" == "7.1" ]]; then :
-elif [[ "${CI_PHP_VERSION}" == "7.2" ]]; then :
-elif [[ "${CI_PHP_VERSION}" == "7.3" ]]; then :
-else
-    vendor/bin/php-cs-fixer --version
-    vendor/bin/php-cs-fixer fix --ansi --config="tests/.php-cs-fixer.php" --diff --dry-run
-    if [[ "${?}" -ne 0 ]]; then
-        echo "Error: found PHP-CS-Fixer coding standard violation(s)"
-        errors+=("found PHP-CS-Fixer coding standard violation(s)")
-    fi
+vendor/bin/php-cs-fixer --version
+vendor/bin/php-cs-fixer fix --ansi --config="tests/.php-cs-fixer.php" --diff --dry-run
+if [[ "${?}" -ne 0 ]]; then
+    echo "❌ Error: found PHP-CS-Fixer coding standard violation(s)"
+    errors+=("found PHP-CS-Fixer coding standard violation(s)")
 fi
+
+popd

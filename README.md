@@ -1,10 +1,11 @@
 # PHP Curl Class: HTTP requests made easy
 
-[![](https://img.shields.io/github/release/php-curl-class/php-curl-class.svg?style=flat-square&sort=semver)](https://github.com/php-curl-class/php-curl-class/releases/)
-[![](https://img.shields.io/github/license/php-curl-class/php-curl-class.svg?style=flat-square)](https://github.com/php-curl-class/php-curl-class/blob/master/LICENSE)
-[![](https://img.shields.io/github/actions/workflow/status/php-curl-class/php-curl-class/ci.yml?style=flat-square&label=build&branch=master)](https://github.com/php-curl-class/php-curl-class/actions/workflows/ci.yml)
-[![](https://img.shields.io/github/actions/workflow/status/php-curl-class/php-curl-class/release.yml?style=flat-square&label=release&branch=master)](https://github.com/php-curl-class/php-curl-class/releases/)
-[![](https://img.shields.io/packagist/dt/php-curl-class/php-curl-class.svg?style=flat-square)](https://github.com/php-curl-class/php-curl-class/releases/)
+[![](https://img.shields.io/github/release/php-curl-class/php-curl-class.svg?style=for-the-badge&sort=semver)](https://github.com/php-curl-class/php-curl-class/releases/)
+[![](https://img.shields.io/github/license/php-curl-class/php-curl-class.svg?style=for-the-badge)](https://github.com/php-curl-class/php-curl-class/blob/master/LICENSE)
+[![](https://img.shields.io/github/actions/workflow/status/php-curl-class/php-curl-class/ci.yml?style=for-the-badge&label=build&branch=master)](https://github.com/php-curl-class/php-curl-class/actions/workflows/ci.yml)
+[![](https://img.shields.io/github/actions/workflow/status/php-curl-class/php-curl-class/release.yml?style=for-the-badge&label=release&branch=master)](https://github.com/php-curl-class/php-curl-class/releases/)
+[![](https://img.shields.io/github/actions/workflow/status/php-curl-class/php-curl-class/dependabot/dependabot-updates?style=for-the-badge&label=Dependabot&branch=master)](https://github.com/php-curl-class/php-curl-class/actions/workflows/dependabot/dependabot-updates)
+[![](https://img.shields.io/packagist/dt/php-curl-class/php-curl-class.svg?style=for-the-badge)](https://github.com/php-curl-class/php-curl-class/releases/)
 
 PHP Curl Class makes it easy to send HTTP requests and integrate with web APIs.
 
@@ -12,18 +13,18 @@ PHP Curl Class makes it easy to send HTTP requests and integrate with web APIs.
 
 ---
 
-- [Installation](#installation)
-- [Requirements](#requirements)
-- [Quick Start and Examples](#quick-start-and-examples)
-- [Available Methods](#available-methods)
-- [Security](#security)
-- [Troubleshooting](#troubleshooting)
-- [Testing](#testing)
-- [Contributing](#contributing)
+- [⚙️ Installation](#%EF%B8%8F-installation)
+- [📋 Requirements](#-requirements)
+- [🚀 Quick Start and Examples](#-quick-start-and-examples)
+- [📖 Available Methods](#-available-methods)
+- [🔒 Security](#-security)
+- [🛠️ Troubleshooting](#%EF%B8%8F-troubleshooting)
+- [🧪 Testing](#-testing)
+- [🤝 Contributing](#-contributing)
 
 ---
 
-### Installation
+### ⚙️ Installation
 
 To install PHP Curl Class, run the following command:
 
@@ -35,11 +36,11 @@ To install the latest commit version:
 
 Installation instructions to use the `composer` command can be found on https://github.com/composer/composer.
 
-### Requirements
+### 📋 Requirements
 
-PHP Curl Class works with PHP 8.3, 8.2, 8.1, 8.0, 7.4, 7.3, 7.2, 7.1, and 7.0.
+PHP Curl Class works with PHP versions 8.5, 8.4, 8.3, 8.2, 8.1, and 8.0.
 
-### Quick Start and Examples
+### 🚀 Quick Start and Examples
 
 More examples are available under [/examples](https://github.com/php-curl-class/php-curl-class/tree/master/examples).
 
@@ -154,7 +155,6 @@ $curl->close();
 ```php
 // Example access to curl object.
 curl_set_opt($curl->curl, CURLOPT_USERAGENT, 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1');
-curl_close($curl->curl);
 ```
 
 ```php
@@ -194,11 +194,12 @@ $multi_curl->start(); // Blocks until all items in the queue have been processed
 
 More examples are available under [/examples](https://github.com/php-curl-class/php-curl-class/tree/master/examples).
 
-### Available Methods
+### 📖 Available Methods
 ```php
 Curl::__construct($base_url = null, $options = [])
 Curl::__destruct()
 Curl::__get($name)
+Curl::__isset($name)
 Curl::afterSend($callback)
 Curl::attemptRetry()
 Curl::beforeSend($callback)
@@ -278,10 +279,13 @@ Curl::setDefaultJsonDecoder()
 Curl::setDefaultTimeout()
 Curl::setDefaultUserAgent()
 Curl::setDefaultXmlDecoder()
+Curl::setDelete($url, $query_parameters = [], $data = [])
 Curl::setDigestAuthentication($username, $password = '')
 Curl::setFile($file)
 Curl::setFollowLocation($follow_location = true)
 Curl::setForbidReuse($forbid_reuse = true)
+Curl::setGet($url, $data = [])
+Curl::setHead($url, $data = [])
 Curl::setHeader($key, $value)
 Curl::setHeaders($headers)
 Curl::setInterface($interface)
@@ -289,18 +293,23 @@ Curl::setJsonDecoder($mixed)
 Curl::setMaxFilesize($bytes)
 Curl::setMaximumRedirects($maximum_redirects)
 Curl::setOpt($option, $value)
+Curl::setOptions($url, $data = [])
 Curl::setOpts($options)
+Curl::setPatch($url, $data = [])
 Curl::setPort($port)
+Curl::setPost($url, $data = '', $follow_303_with_post = false)
 Curl::setProtocols($protocols)
 Curl::setProxy($proxy, $port = null, $username = null, $password = null)
 Curl::setProxyAuth($auth)
 Curl::setProxyTunnel($tunnel = true)
 Curl::setProxyType($type)
+Curl::setPut($url, $data = [])
 Curl::setRange($range)
 Curl::setRedirectProtocols($redirect_protocols)
 Curl::setReferer($referer)
 Curl::setReferrer($referrer)
 Curl::setRetry($mixed)
+Curl::setSearch($url, $data = [])
 Curl::setStop($callback = null)
 Curl::setTimeout($seconds)
 Curl::setUrl($url, $mixed_data = '')
@@ -329,6 +338,7 @@ MultiCurl::close()
 MultiCurl::complete($callback)
 MultiCurl::disableTimeout()
 MultiCurl::error($callback)
+MultiCurl::getActiveCurls()
 MultiCurl::getOpt($option)
 MultiCurl::removeHeader($key)
 MultiCurl::setAutoReferer($auto_referer = true)
@@ -376,19 +386,19 @@ MultiCurl::unsetProxy()
 MultiCurl::verbose($on = true, $output = 'STDERR')
 ```
 
-### Security
+### 🔒 Security
 
 See [SECURITY](https://github.com/php-curl-class/php-curl-class/blob/master/SECURITY.md) for security considerations.
 
-### Troubleshooting
+### 🛠️ Troubleshooting
 
 See [TROUBLESHOOTING](https://github.com/php-curl-class/php-curl-class/blob/master/TROUBLESHOOTING.md) for help troubleshooting.
 
-### Testing
+### 🧪 Testing
 
 See [TESTING](https://github.com/php-curl-class/php-curl-class/blob/master/TESTING.md) for testing information.
 
-### Contributing
+### 🤝 Contributing
 
 1. Check for open issues or open a new issue to start a discussion around a bug or feature.
 1. Fork the repository on GitHub to start making your changes.

@@ -1,0 +1,40 @@
+name: Update outdated packages
+
+on:
+    schedule:
+        - cron: '0 20 * * 1-4'
+    workflow_dispatch:
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Upgrade outdated packages
+        run: |
+          items=($(
+              jq -r '.[1:]' "scripts/make_release_requirements.json" |
+              jq -r '.[] | "\(.name)|\(.version)|\(.latest_version)"'
+          ))
+          for item in "${items[@]}"; do
+              IFS='|' read -r "package_name" "package_version" "package_latest_version" <<< "${item}"
+              echo "found outdated package:"
+              echo "name: ${package_name}"
+              echo "version: ${package_version}"
+              echo "latest_version: ${package_latest_version}"
+              curl \
+                --request "POST" \
+                --silent \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${TOKEN}" \
+                "https://api.github.com/repos/php-curl-class/php-curl-class/actions/workflows/outdated-update-package.yml/dispatches" \
+                --data "{\"ref\":\"master\",\"inputs\":{\"package_name\":\"${package_name}\",\"package_version\":\"${package_latest_version}\"}}"
+          done
+
+          echo "done"
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}

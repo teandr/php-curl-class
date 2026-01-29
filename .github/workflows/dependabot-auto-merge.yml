@@ -13,12 +13,20 @@ jobs:
     steps:
       - name: Dependabot metadata
         id: dependabot-metadata
-        uses: dependabot/fetch-metadata@v2.1.0
+        uses: dependabot/fetch-metadata@v2.5.0
 
       - name: Approve and label updates
         run: |
-          gh pr review --approve "$PR_URL"
-          gh pr edit --add-label "cleanup-no-release-required" "$PR_URL"
+          review_status="$(
+              gh pr view "${PR_URL}" \
+                  --json="reviewDecision" \
+                  --jq=".reviewDecision"
+          )"
+          echo "Pull request review status: ${review_status}"
+          if [[ "${review_status}" != "APPROVED" ]]; then
+              gh pr review --approve "${PR_URL}"
+          fi
+          gh pr edit --add-label "cleanup-no-release-required" "${PR_URL}"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -26,7 +34,7 @@ jobs:
       - name: Merge Dependabot patch updates
         if: ${{ steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' }}
         run: |
-          gh pr merge --auto --merge "$PR_URL"
+          gh pr merge --auto --squash "${PR_URL}"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -34,7 +42,7 @@ jobs:
       - name: Merge Dependabot minor updates
         if: ${{ steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor' }}
         run: |
-          gh pr merge --auto --merge "$PR_URL"
+          gh pr merge --auto --squash "${PR_URL}"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,7 +50,7 @@ jobs:
       - name: Merge Dependabot indirect dependency updates
         if: ${{ steps.dependabot-metadata.outputs.dependency-type == 'indirect' }}
         run: |
-          gh pr merge --auto --merge "$PR_URL"
+          gh pr merge --auto --squash "${PR_URL}"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

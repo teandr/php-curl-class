@@ -6,23 +6,24 @@
 #     $ brew install pre-commit
 #
 #   2. Install hooks
-#     $ pre-commit install
+#     $ pre-commit install --config="tests/.pre-commit-config.yaml"
 #
 #   3. Optionally, enable automatic updates
-#     $ pre-commit autoupdate
+#     $ pre-commit autoupdate --config="tests/.pre-commit-config.yaml"
 repos:
 - repo: https://github.com/psf/black
-  rev: 24.4.2
+  rev: 26.1.0
   hooks:
   - id: black
     name: black
     entry: black
 - repo: https://github.com/pycqa/flake8
-  rev: 7.0.0
+  rev: 7.3.0
   hooks:
   - id: flake8
+    args: ["--config", "tests/setup.cfg"]
 - repo: https://github.com/pycqa/isort
-  rev: 5.13.2
+  rev: 7.0.0
   hooks:
   - id: isort
     name: isort
@@ -36,7 +37,7 @@ repos:
     files: 'composer\.json'
     pass_filenames: true
 - repo: https://github.com/jazzband/pip-tools
-  rev: 7.4.1
+  rev: v7.5.2
   hooks:
   - id: pip-compile
     name: pip-compile make_release_requirements.in

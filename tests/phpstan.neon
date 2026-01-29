@@ -1,0 +1,16 @@
+includes:
+    - phpstan-baseline.neon
+    - phar://phpstan.phar/conf/bleedingEdge.neon
+
+parameters:
+    reportUnmatchedIgnoredErrors: false
+
+    # TODO: Increase rule level to be more strict.
+    level: 3
+
+    # TODO: Remove all exclusions except vendor/ and fix related errors.
+    excludePaths:
+        - ../examples/*
+        - ../tests/*
+        - ../vendor/*
+        - ../www/*
